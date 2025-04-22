@@ -1,0 +1,209 @@
+'''
+Bienvenue dans le code python du Compteur Binaire, Décimal & Hexadécimal pour Blender Version 4.4.
+Ce code est prévu pour fonctionnait avec le fichier Blender "Compteur_BDH.blend".
+Les objets de la scènes sont nommés: 
+- Pour les chiffres binaires = "plan_0", "plan_1", "plan_2", "plan_3", ... "plan_7".
+- Pour les chiffres décimaux = "Cylindre_0", "Cylindre_1", "Cylindre_2" et "Cylindres_3".
+- Pour les chiffres hexadécimaux = "hexa_0", "hexa_1", "hexa_2" et "hexa_3".
+Vous pouvez modifiez l'animation graçe aux variables ci-dessous.
+
+ENJOY !!
+'''
+
+import bpy
+from math import radians
+
+# Configuration
+num_bits = 8		# Nombre de chiffres binaires
+rotation_duration = 8	# Durée des rotations (en frames)
+hold_duration = 8		# Durée des pauses (en frames)
+total_steps = 256  		# Nombre total de rotations (2^num_bits)	
+num_cylinders = 4  		# Nombre de Cylindres Decimaux
+num_hexa = 4 		# Nombre de Cylindres Hexadécimaux
+
+
+# Reset des animations
+for obj in bpy.data.objects:
+    if obj.animation_data:
+        obj.animation_data_clear()
+
+# --- CODE BINAIRE ORIGINAL Version3.0 ---
+def animate_bit(bit, start_frame, target_state):
+    obj = bpy.data.objects.get(f"plan_{bit}")
+    if not obj:
+        return
+    
+    if target_state:
+        start_angle, end_angle = 0, 90
+    else:
+        start_angle, end_angle = 90, 180
+    
+    rotate_end = start_frame + rotation_duration
+    
+    obj.rotation_euler.y = radians(start_angle)
+    obj.keyframe_insert(data_path="rotation_euler", frame=start_frame, index=1)
+    
+    obj.rotation_euler.y = radians(end_angle)
+    obj.keyframe_insert(data_path="rotation_euler", frame=rotate_end, index=1)
+    
+    display_angle = 90 if target_state else 0
+    obj.rotation_euler.y = radians(display_angle)
+    obj.keyframe_insert(data_path="rotation_euler", frame=rotate_end + 1, index=1)
+    
+    obj.keyframe_insert(data_path="rotation_euler", frame=rotate_end + hold_duration, index=1)
+    
+    if obj.animation_data.action:
+        for fcurve in obj.animation_data.action.fcurves:
+            if fcurve.data_path == "rotation_euler" and fcurve.array_index == 1:
+                for kf in fcurve.keyframe_points:
+                    kf.interpolation = 'LINEAR'
+
+def get_bit_states(step):
+    binary = bin(step)[2:].zfill(num_bits)
+    return [int(binary[num_bits-1-bit]) for bit in range(num_bits)]
+# --- FIN DU CODE BINAIRE ---
+
+
+# --- CODE POUR LES CYLINDRES ---
+cylinder_rotations = [0] * num_cylinders  # Pour suivre la rotation cumulative
+
+def animate_cylinder(cyl_index, start_frame, digit):
+    obj = bpy.data.objects.get(f"Cylindre_{cyl_index}")
+    if not obj:
+        return
+    
+    global cylinder_rotations
+    
+    # Calcul de la rotation nécessaire (toujours dans le même sens)
+    target_angle = digit * 36  # 0° à 324° par pas de 36° 
+    
+    # Calcul du chemin le plus court
+    angle_diff = (target_angle - cylinder_rotations[cyl_index] + 360) % 360
+    if angle_diff > 180:
+        angle_diff -= 360
+    
+    # Animation
+    rotate_end = start_frame + rotation_duration
+    
+    # Début de rotation
+    obj.rotation_euler.y = radians(cylinder_rotations[cyl_index])
+    obj.keyframe_insert(data_path="rotation_euler", frame=start_frame, index=1)
+    
+    # Fin de rotation
+    new_angle = cylinder_rotations[cyl_index] + angle_diff
+    obj.rotation_euler.y = radians(new_angle)
+    obj.keyframe_insert(data_path="rotation_euler", frame=rotate_end, index=1)
+    
+    # Maintien jusqu'à la prochaine étape
+    obj.keyframe_insert(data_path="rotation_euler", frame=rotate_end + hold_duration, index=1)
+    
+    # Mise à jour de la rotation cumulative
+    cylinder_rotations[cyl_index] = new_angle
+    
+    # Interpolation
+    if obj.animation_data.action:
+        for fcurve in obj.animation_data.action.fcurves:
+            if fcurve.data_path == "rotation_euler" and fcurve.array_index == 1:
+                for kf in fcurve.keyframe_points:
+                    kf.interpolation = 'LINEAR'
+
+# Initialisation des cylindres à 0°
+for i in range(num_cylinders):
+    obj = bpy.data.objects.get(f"Cylindre_{i}")
+    if obj:
+        obj.rotation_euler.y = radians(0)
+        obj.keyframe_insert(data_path="rotation_euler", frame=0, index=1)
+# --- FIN CODE CYLINDRES DECIMAUX ---
+    
+    
+# --- CODE POUR LES CYLINDRES HEXADECIMAUX ---
+hexa_rotations = [0] * num_hexa  # Pour suivre la rotation cumulative
+
+def hex_to_digit(hex_char):
+    """Convertit un caractère hexadécimal en valeur numérique (0-15)"""
+    try:
+        return int(hex_char)
+    except ValueError:
+        return 10 + ord(hex_char.upper()) - ord('A')
+
+def animate_hexa(hex_index, start_frame, hex_char):
+    obj = bpy.data.objects.get(f"hexa_{hex_index}")
+    if not obj:
+        return
+    
+    global hexa_rotations
+    
+    # Conversion hexadécimale
+    digit = hex_to_digit(hex_char)
+    
+    # Calcul de la rotation nécessaire (22.5° par digit)
+    target_angle = digit * 22.5  # 0° à 337.5° (16 positions)
+    
+    # Calcul du chemin le plus court
+    angle_diff = (target_angle - hexa_rotations[hex_index] + 360) % 360
+    if angle_diff > 180:
+        angle_diff -= 360
+    
+    # Animation
+    rotate_end = start_frame + rotation_duration
+    
+    # Début de rotation
+    obj.rotation_euler.y = radians(hexa_rotations[hex_index])
+    obj.keyframe_insert(data_path="rotation_euler", frame=start_frame, index=1)
+    
+    # Fin de rotation
+    new_angle = hexa_rotations[hex_index] + angle_diff
+    obj.rotation_euler.y = radians(new_angle)
+    obj.keyframe_insert(data_path="rotation_euler", frame=rotate_end, index=1)
+    
+    # Maintien jusqu'à la prochaine étape
+    obj.keyframe_insert(data_path="rotation_euler", frame=rotate_end + hold_duration, index=1)
+    
+    # Mise à jour de la rotation cumulative
+    hexa_rotations[hex_index] = new_angle
+    
+    # Interpolation
+    if obj.animation_data.action:
+        for fcurve in obj.animation_data.action.fcurves:
+            if fcurve.data_path == "rotation_euler" and fcurve.array_index == 1:
+                for kf in fcurve.keyframe_points:
+                    kf.interpolation = 'LINEAR'
+
+# Initialisation des cylindres HEXA à 0°
+for i in range(num_hexa):
+    obj = bpy.data.objects.get(f"hexa_{i}")
+    if obj:
+        obj.rotation_euler.y = radians(0)
+        obj.keyframe_insert(data_path="rotation_euler", frame=0, index=1)
+
+# Modification de la boucle principale pour l'hexadécimal
+current_states = [0]*num_bits
+for step in range(total_steps):
+    start_frame = step * (rotation_duration + hold_duration)
+    target_states = get_bit_states(step)
+    
+    # Animation binaire (inchangée)
+    for bit in range(num_bits):
+        if target_states[bit] != current_states[bit]:
+            animate_bit(bit, start_frame, target_states[bit])
+    
+    # Animation décimale (inchangée)
+    decimal_str = f"{step:04d}"
+    for i in range(num_cylinders):
+        digit = int(decimal_str[3-i])
+        animate_cylinder(i, start_frame, digit)
+    
+    # Animation hexadécimale (nouvelle)
+    hex_str = f"{step:03X}"  # Format hexadécimal sur 3 chiffres
+    hex_str = hex_str.zfill(3)  # Ajoute les zéros devant si nécessaire
+    
+    # Animer chaque cylindre hexa (hexa_0 = digit le moins significatif)
+    for i in range(min(num_hexa, len(hex_str))):
+        animate_hexa(i, start_frame, hex_str[len(hex_str)-1-i])
+    
+    current_states = target_states.copy()
+    
+    
+
+bpy.context.scene.frame_end = total_steps * (rotation_duration + hold_duration)
+print("✅ SYSTÈME COMPLET AVEC ROTATIONS FLUIDES !")
